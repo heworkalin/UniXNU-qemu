@@ -39,6 +39,9 @@ archives = [
   "build-mockfs-fixture.py",
   "build-link-stubs.py",
   "build-platform-power.py",
+  # VirtIO MMIO block: publishes the QEMU disk images as IOMedia (this board links a real
+  # IOStorageFamily, unlike the picasso build where that class is a zero stub).
+  "build-arm-driver.py NativeVirtioBlock",
 ]
 
 # The same original kernelcache and prelink selection as the boards: the target image is the same.

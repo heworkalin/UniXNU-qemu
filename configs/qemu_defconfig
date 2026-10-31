@@ -26,6 +26,15 @@ CONFIG_XNU_SOURCE_MOCKFS=y
 
 CONFIG_XNU_CRYPTO_BOOTSTRAP="prelinked"
 # No-op hooks for probes of the left-out components (scripts/build-link-stubs.py).
-CONFIG_XNU_EXTRA_LD_ARCHIVES="{tree}/build/link-stubs/libLinkStubs.a"
+CONFIG_XNU_EXTRA_LD_ARCHIVES="{tree}/build/link-stubs/libLinkStubs.a {tree}/build/virtio-mmio-block/libVirtioMmioBlock.a"
 CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n
 CONFIG_XNU_ARMVIRT_PLATFORM=n
+
+# Archives of [kernel] in board.toml are built from the compile records (tool tree 066c8d8 needs this on).
+CONFIG_XNU_BUILD_ARCHIVES=y
+
+# Serial console: XNU's pexpert/arm/pe_serial.c has the PL011 path behind VMAPPLE_UART, which
+# looks for a DT node named "uart0"; scripts/qemu-entry/make-dt.py declares it with --qemu-uart.
+# With this and "serial=3" the kernel log goes to the QEMU serial port (terminal), not only to
+# the frame buffer.
+CONFIG_XNU_EXTRA_CFLAGS="-Wno-reserved-identifier -Wno-pre-c11-compat -Wno-missing-designated-field-initializers -Wno-suggest-override -Wno-unnecessary-virtual-specifier -Wno-suggest-destructor-override -Wno-ms-bitfield-padding -DVMAPPLE_UART=1"

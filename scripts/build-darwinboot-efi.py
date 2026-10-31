@@ -10,11 +10,14 @@ import shutil
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-toolchain = ROOT.parent / 'toolchain'
-work = ROOT / 'build/darwinboot-efi'
+# Build output directory: upstream keeps this repository under <UNIXNU>/out/<device>;
+# a side-by-side checkout passes UNIXNU_QEMU_WORK=<the out/<device> directory>.
+WORK = Path(os.environ['UNIXNU_QEMU_WORK']) if os.environ.get('UNIXNU_QEMU_WORK') else ROOT.parent
+toolchain = WORK / 'toolchain'
+work = WORK / 'build/darwinboot-efi'
 # refer/ of the tree only holds the references of the last step, so also look in the driver's feed clones.
 candidates = ([Path(os.environ['UNIXNU_EDK2'])] if os.environ.get('UNIXNU_EDK2') else []) + \
-    [ROOT / 'refer/edk2'] + sorted(ROOT.parents[1].glob('feeds/mu_basecore-*'))
+    [ROOT / 'refer/edk2', WORK / 'tree/refer/edk2'] + sorted(WORK.glob('feeds/mu_basecore-*')) + sorted((WORK / 'tree/refer').glob('edk2'))
 edk2 = next((path.resolve() for path in candidates if (path / 'MdePkg/MdePkg.dec').is_file()), None)
 if edk2 is None:
     raise SystemExit('no edk2 tree (UNIXNU_EDK2, refer/edk2 or out/feeds); run "unixnu build package" first')
@@ -29,11 +32,18 @@ for name in ('target', 'tools_def', 'build_rule'):
     if not (conf / f'{name}.txt').is_file():
         shutil.copy(tools / 'Conf' / f'{name}.template', conf / f'{name}.txt')
 env = dict(os.environ, WORKSPACE=str(work), CONF_PATH=str(conf), EDK_TOOLS_PATH=str(tools), PYTHON_COMMAND='python3',
-           PACKAGES_PATH=':'.join(str(p) for p in (ROOT / 'drivers/DarwinBoot', ROOT / 'package', edk2)),
+           PACKAGES_PATH=':'.join(str(p) for p in (
+               next(p for p in ((ROOT / 'drivers/DarwinBoot'), (WORK / 'tree/drivers/DarwinBoot'))
+                    if p.is_dir()),
+               next(p for p in ((ROOT / 'package'), (WORK / 'tree/package'), (WORK / 'tree/package/UniXNUPkg/..'))
+                    if (p / 'UniXNUPkg/UniXNUPkg.dec').is_file()),
+               edk2)),
            CLANG_BIN=str(toolchain) + '/',
            PATH=os.pathsep.join([str(tools / 'BinWrappers/PosixLike'), str(tools / 'Source/C/bin'), os.environ['PATH']]))
 subprocess.run(['build', '-p', 'DarwinBootPkg/DarwinBoot.dsc', '-a', 'AARCH64', '-b', 'DEBUG', '-t', 'CLANGPDB',
-                '-n', str(os.cpu_count() or 4)], cwd=work, env=env, check=True, stdout=subprocess.DEVNULL)
-built = work / 'Build/DarwinBoot/DEBUG_CLANGPDB/AARCH64/DarwinBoot.efi'
+                '-n', str(os.cpu_count() or 4)], cwd=work, env=env, check=True)
+# edk2 writes Build/; macOS is case-insensitive, Linux is not: accept either.
+built = next(p for p in (work / 'Build/DarwinBoot/DEBUG_CLANGPDB/AARCH64/DarwinBoot.efi',
+                         work / 'build/DarwinBoot/DEBUG_CLANGPDB/AARCH64/DarwinBoot.efi') if p.is_file())
 shutil.copyfile(built, work / 'DarwinBoot.efi')
 print(work / 'DarwinBoot.efi')

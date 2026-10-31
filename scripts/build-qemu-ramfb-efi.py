@@ -11,10 +11,12 @@ import shutil
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-toolchain = ROOT.parent / 'toolchain'
-work = ROOT / 'build/qemu-ramfb-efi'
+# Build output directory (see build-darwinboot-efi.py): UNIXNU_QEMU_WORK=<out>/<device>.
+WORK = Path(os.environ['UNIXNU_QEMU_WORK']) if os.environ.get('UNIXNU_QEMU_WORK') else ROOT.parent
+toolchain = WORK / 'toolchain'
+work = WORK / 'build/qemu-ramfb-efi'
 candidates = ([Path(os.environ['UNIXNU_EDK2'])] if os.environ.get('UNIXNU_EDK2') else []) + \
-    [ROOT / 'refer/edk2'] + sorted(ROOT.parents[1].glob('feeds/mu_basecore-*'))
+    [ROOT / 'refer/edk2', WORK / 'tree/refer/edk2'] + sorted(WORK.glob('feeds/mu_basecore-*'))
 edk2 = next((path.resolve() for path in candidates if (path / 'MdePkg/MdePkg.dec').is_file()), None)
 if edk2 is None:
     raise SystemExit('no edk2 tree (UNIXNU_EDK2, refer/edk2 or out/feeds); run "unixnu build package" first')
@@ -30,11 +32,15 @@ for name in ('target', 'tools_def', 'build_rule'):
         shutil.copy(tools / 'Conf' / f'{name}.template', conf / f'{name}.txt')
 # The board's package directory is kits/qemu in the build tree.
 env = dict(os.environ, WORKSPACE=str(work), CONF_PATH=str(conf), EDK_TOOLS_PATH=str(tools), PYTHON_COMMAND='python3',
-           PACKAGES_PATH=':'.join(str(p) for p in (ROOT / 'kits/qemu', edk2)),
+           PACKAGES_PATH=':'.join(str(p) for p in (
+               next(q for q in ((ROOT / 'kits/qemu'), (WORK / 'tree/kits/qemu'), (WORK / 'tree/package')) if q.is_dir()),
+               edk2)),
            CLANG_BIN=str(toolchain) + '/',
            PATH=os.pathsep.join([str(tools / 'BinWrappers/PosixLike'), str(tools / 'Source/C/bin'), os.environ['PATH']]))
 subprocess.run(['build', '-p', 'QemuRamfbPkg/QemuRamfbPkg.dsc', '-a', 'AARCH64', '-b', 'DEBUG', '-t', 'CLANGPDB',
                 '-n', str(os.cpu_count() or 4)], cwd=work, env=env, check=True, stdout=subprocess.DEVNULL)
-built = work / 'Build/QemuRamfb/DEBUG_CLANGPDB/AARCH64/QemuRamfb.efi'
+# edk2 writes Build/; macOS is case-insensitive, Linux is not: accept either.
+built = next(p for p in (work / 'Build/QemuRamfb/DEBUG_CLANGPDB/AARCH64/QemuRamfb.efi',
+                         work / 'build/QemuRamfb/DEBUG_CLANGPDB/AARCH64/QemuRamfb.efi') if p.is_file())
 shutil.copyfile(built, work / 'QemuRamfb.efi')
 print(work / 'QemuRamfb.efi')

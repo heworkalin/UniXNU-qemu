@@ -22,14 +22,18 @@ import time
 import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
-WORK = ROOT.parent
+# Build output ("WORK"): upstream keeps the device repository under <UNIXNU>/out/<device>,
+# so ROOT.parent is the out directory. A separate checkout (device repo next to the tool tree)
+# needs UNIXNU_QEMU_WORK=<the out/<device> directory>.
+WORK = Path(os.environ['UNIXNU_QEMU_WORK']) if os.environ.get('UNIXNU_QEMU_WORK') else ROOT.parent
 MEMORY_MIB = 6144                    # [payload] dram_size of board.toml
 SHARED_WINDOW = 0x40000000 + (MEMORY_MIB << 20)   # --shared-window: guest physical, after QEMU virt's RAM
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--seconds', type=int, default=300, help='stop QEMU after this long')
 parser.add_argument('--every', type=int, default=20, help='seconds between screenshots')
-parser.add_argument('--display', default='none', help='none, or cocoa for a window on this Mac')
+parser.add_argument('--display', default='none',
+                    help="none, cocoa (macOS), or a QEMU display backend for a live window: gtk, sdl")
 parser.add_argument('--native-user', action='store_true',
                     help="boot UniXNU's static test process (build-native-user-fixture.py) as launchd from mockfs on md0 "
                          'and read its results before QEMU stops')
@@ -59,6 +63,12 @@ parser.add_argument('--metal-clients', default='iconservicesagent',
 parser.add_argument('--metal-verbose', action='store_true',
                     help='with --metal, log every request and command of the processes besides the render server (qemu-metal-host '
                          '--verbose for slots 1-8)')
+parser.add_argument('--disk', action='append', default=[], metavar='IMAGE',
+                    help='attach a raw image as a virtio-blk MMIO disk (repeatable); the kernel '
+                         'sees it through the virtio-mmio windows of the ADT')
+parser.add_argument('--serial-stdio', action='store_true',
+                    help='put the guest serial port on this terminal instead of serial.log '
+                         '(kernel console, needs the ADT uart0 node + serial=3)')
 parser.add_argument('--accel', choices=('tcg', 'hvf'), default='tcg',
                     help='tcg emulates a Cortex-A710; hvf runs the guest on this Mac\'s CPU (Hypervisor.framework). The '
                          'payload must be built for the same accelerator: UNIXNU_QEMU_ACCEL=hvf for hvf')
@@ -67,22 +77,40 @@ if args.native_user and args.os_root:
     parser.error('--native-user boots from md0; leave out --os-root')
 if args.metal and not args.shared_window:
     args.shared_window = 2048
-metal_host = ROOT / 'build/qemu-metal/qemu-metal-host'
+metal_host = WORK / 'build/qemu-metal/qemu-metal-host'
 if args.metal and not metal_host.is_file():
     raise SystemExit(f'{metal_host} missing (scripts/build-qemu-metal.py host)')
 
 qemu = shutil.which('qemu-system-aarch64')
 if not qemu:
     raise SystemExit('qemu-system-aarch64 not found (brew install qemu)')
-code = Path(qemu).resolve().parents[1] / 'share/qemu/edk2-aarch64-code.fd'
+# AArch64 EDK II code image. Homebrew installs it under share/qemu, Arch/Debian use
+# /usr/share/edk2; UNIXNU_QEMU_EDK2 overrides both (no root install needed).
+code = Path(os.environ['UNIXNU_QEMU_EDK2']) if os.environ.get('UNIXNU_QEMU_EDK2') \
+    else Path(qemu).resolve().parents[1] / 'share/qemu/edk2-aarch64-code.fd'
+if not code.is_file():
+    for candidate in ('/usr/share/edk2/aarch64/QEMU_EFI.fd', '/usr/share/AAVMF/AAVMF_CODE.fd',
+                      '/usr/share/edk2/aarch64/QEMU_EFI-pflash.raw'):
+        if Path(candidate).is_file():
+            code = Path(candidate)
+            break
+def script(name):
+    """Build script by name: the device repository may only carry a few of them, the rest
+    live in the assembled tree (WORK/tree/scripts)."""
+    for candidate in (ROOT / 'scripts' / name, WORK / 'tree/scripts' / name):
+        if candidate.is_file():
+            return candidate
+    raise SystemExit(f'{name} not found in {ROOT / "scripts"} or {WORK / "tree/scripts"}')
+
+
 payload = WORK / 'payload/payload.img'
 unixnu = WORK / 'package/Build/Out/AARCH64-DEBUG/UniXNU.efi'
-for path, step in ((code, 'brew install qemu'), (payload, 'unixnu build payload'), (unixnu, 'unixnu build package')):
+for path, step in ((code, 'install edk2-aarch64 or set UNIXNU_QEMU_EDK2'), (payload, 'unixnu build payload'), (unixnu, 'unixnu build package')):
     if not path.is_file():
         raise SystemExit(f'{path} missing ({step})')
-darwinboot = ROOT / 'build/darwinboot-efi/DarwinBoot.efi'
+darwinboot = WORK / 'build/darwinboot-efi/DarwinBoot.efi'
 if not darwinboot.is_file():
-    subprocess.run(['python3', ROOT / 'scripts/build-darwinboot-efi.py'], check=True)
+    subprocess.run(['python3', script('build-darwinboot-efi.py')], check=True)
 
 out = WORK / 'run' / datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
 esp = out / 'esp'
@@ -98,15 +126,15 @@ if args.screen != 'firmware':
     if not re.fullmatch(r'\d{3,4}x\d{3,4}', args.screen):
         parser.error('--screen takes WIDTHxHEIGHT or "firmware"')
     # Loaded before DarwinBoot, so UniXNU's menu and the kernel's frame buffer have the new size.
-    ramfb = ROOT / 'build/qemu-ramfb-efi/QemuRamfb.efi'
+    ramfb = WORK / 'build/qemu-ramfb-efi/QemuRamfb.efi'
     if not ramfb.is_file():
-        subprocess.run(['python3', ROOT / 'scripts/build-qemu-ramfb-efi.py'], check=True)
+        subprocess.run(['python3', script('build-qemu-ramfb-efi.py')], check=True)
     shutil.copyfile(ramfb, esp / 'EFI/UniXNU/Payloads/QemuRamfb.efi')
     config = config.replace('[[driver]]\npath = "Payloads/DarwinBoot.efi"',
                             '[[driver]]\npath = "Payloads/QemuRamfb.efi"\n\n[[driver]]\npath = "Payloads/DarwinBoot.efi"', 1)
     (esp / 'EFI/UniXNU/unixnu.toml').write_text(config)
 
-spec = importlib.util.spec_from_file_location('make_qemu_adt', ROOT / 'scripts/make-qemu-adt.py')
+spec = importlib.util.spec_from_file_location('make_qemu_adt', script('make-qemu-adt.py'))
 adt_tool = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(adt_tool)
 adt = esp / 'EFI/UniXNU/Payloads/kernel.macho.adt'
@@ -126,12 +154,12 @@ if timebase != expected:
     raise SystemExit(f'the payload\'s device tree has a {timebase} Hz timebase, {args.accel} needs {expected} Hz: rebuild '
                      f'the payload with UNIXNU_QEMU_ACCEL={args.accel}')
 
-fixture = ROOT / 'build/native-user-fixture'
+fixture = WORK / 'build/native-user-fixture'
 if args.native_user:
     # The test process is the whole md0 image (a single Mach-O, which mockfs serves as /sbin/launchd); its own trust
     # cache admits it under the platform-only AMFI policy.
     if not (fixture / 'launchd.macho').is_file():
-        subprocess.run(['python3', ROOT / 'scripts/build-native-user-fixture.py'], check=True)
+        subprocess.run(['python3', script('build-native-user-fixture.py')], check=True)
     payloads = esp / 'EFI/UniXNU/Payloads'
     shutil.copyfile(fixture / 'launchd.macho', payloads / 'launchd.macho')
     shutil.copyfile(fixture / 'trustcache.bundle', payloads / 'kernel.macho.trustcache')
@@ -151,6 +179,13 @@ variables = work / 'vars.fd'
 with variables.open('wb') as f:
     f.truncate(code.stat().st_size)
 sock = work / 'qmp.sock'
+if args.display == 'none':
+    display_arg = 'none'
+elif args.display == 'cocoa':
+    display_arg = 'cocoa,zoom-to-fit=on,show-cursor=on'
+else:
+    display_arg = args.display
+
 command = [qemu, '-M', 'virt,virtualization=off,secure=off,gic-version=3', '-accel', args.accel,
            '-cpu', 'cortex-a710' if args.accel == 'tcg' else 'host',
            '-m', str(MEMORY_MIB), '-smp', '1',
@@ -160,8 +195,12 @@ command = [qemu, '-M', 'virt,virtualization=off,secure=off,gic-version=3', '-acc
            # A cocoa window scales the 800x600 frame buffer to its size (drag its corner, or View > Zoom To Fit) and
            # keeps the Mac pointer visible: with the absolute tablet QEMU would hide it, and iPadOS draws none for a
            # touch screen.
-           '-display', args.display + (',zoom-to-fit=on,show-cursor=on' if args.display == 'cocoa' else ''), '-no-reboot',
-           '-serial', f'file:{out / "serial.log"}', '-qmp', f'unix:{sock},server=on,wait=off']
+           '-display', display_arg, '-no-reboot',
+           *[part for image in args.disk
+             for part in ('-drive', f'if=none,id=var{args.disk.index(image)},format=raw,file={Path(image).resolve()}',
+                          '-device', f'virtio-blk-device,drive=var{args.disk.index(image)}')],
+           '-serial', 'stdio' if args.serial_stdio else f'file:{out / "serial.log"}',
+           '-qmp', f'unix:{sock},server=on,wait=off']
 if args.screen != 'firmware':
     command += ['-fw_cfg', f'name=opt/org.unixnu/ramfb-size,string={args.screen}']
 shared_ram = out / 'shared.bin'
@@ -218,7 +257,10 @@ if args.metal:
     hosts = [subprocess.Popen([str(metal_host), '--window', str(shared_ram), '--slot', str(slot), '--log', str(out / 'metal-host.log')]
                               + (['--verbose'] if args.metal_verbose and slot else []))
              for slot in range(9)]
-process = subprocess.Popen([str(part) for part in command], stdout=open(out / 'qemu.log', 'w'), stderr=subprocess.STDOUT)
+# --serial-stdio: let the guest serial port reach this terminal directly instead of qemu.log.
+process = subprocess.Popen([str(part) for part in command],
+                           stdout=None if args.serial_stdio else open(out / 'qemu.log', 'w'),
+                           stderr=None if args.serial_stdio else subprocess.STDOUT)
 
 
 def png(ppm, target):
@@ -301,7 +343,7 @@ for host in hosts:
 for host in hosts:
     host.wait(timeout=30)
 shared_ram.unlink(missing_ok=True)
-log = (out / 'serial.log').read_bytes().decode('utf-8', 'replace')
+log = (out / 'serial.log').read_bytes().decode('utf-8', 'replace') if (out / 'serial.log').is_file() else ''
 for line in [line for line in log.splitlines() if line.startswith(('UNIXNU:', 'DARWINBOOT:'))][-4:]:
     print(line)
 print(f'qemu exit {process.returncode}; {len(shots)} screenshots in {out}')

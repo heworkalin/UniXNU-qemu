@@ -112,7 +112,8 @@ darwinboot = WORK / 'build/darwinboot-efi/DarwinBoot.efi'
 if not darwinboot.is_file():
     subprocess.run(['python3', script('build-darwinboot-efi.py')], check=True)
 
-out = WORK / 'run' / datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+# 并行：秒级时间戳会撞，带上 pid 保证唯一（QEMU 允许同时跑多个实例，只要盘与运行目录分开）
+out = WORK / 'run' / (datetime.datetime.now().strftime('%Y%m%d-%H%M%S') + '-%d' % os.getpid())
 esp = out / 'esp'
 esp.mkdir(parents=True)
 subprocess.run(['mcopy', '-s', '-n', '-i', payload, '::/EFI', esp], check=True, env=dict(os.environ, MTOOLS_SKIP_CHECK='1'))
@@ -178,7 +179,7 @@ work = Path(tempfile.mkdtemp(prefix='unixnu-qemu-'))   # short path: a QMP socke
 variables = work / 'vars.fd'
 with variables.open('wb') as f:
     f.truncate(code.stat().st_size)
-sock = work / 'qmp.sock'
+sock = work / ('qmp-%d.sock' % os.getpid())   # 每个实例各自的 QMP socket
 if args.display == 'none':
     display_arg = 'none'
 elif args.display == 'cocoa':

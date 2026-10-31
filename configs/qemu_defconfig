@@ -51,3 +51,6 @@ CONFIG_XNU_BUILD_ARCHIVES=y
 # With this and "serial=3" the kernel log goes to the QEMU serial port (terminal), not only to
 # the frame buffer.
 CONFIG_XNU_EXTRA_CFLAGS="-Wno-reserved-identifier -Wno-pre-c11-compat -Wno-missing-designated-field-initializers -Wno-suggest-override -Wno-unnecessary-virtual-specifier -Wno-suggest-destructor-override -Wno-ms-bitfield-padding -DVMAPPLE_UART=1"
+
+# S3/S4：链接我们的 Legacy ABI 虚表（钩子会打 PICASSO-LEGACY 日志）
+CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y

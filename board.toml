@@ -38,6 +38,8 @@ archives = [
   "build-libpthread-kernel.py",
   "build-mockfs-fixture.py",
   "build-link-stubs.py",
+  # 显示接口（S3/S4）：用 audit 抽到的原版 ABI 生成 358 槽虚表；--log 让钩子打印
+  "build-legacy-abi-picasso.py --log",
   # ⚠️ 临时：build-platform-power.py（AMFI→PMGR 桥）在本阶段关掉——它的资格审计要求
   # 内核候选里存在 AMFI，而我们已用 miniamfi 替掉（§14 恢复清单第 1 项）。
   # "build-platform-power.py",

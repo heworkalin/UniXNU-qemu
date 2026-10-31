@@ -20,11 +20,17 @@ CONFIG_XNU_NATIVE_CS_HASH_CACHE=y
 CONFIG_XNU_DT_PANIC_REGION=y
 CONFIG_XNU_NATIVE_ARCH_TIMER=y
 CONFIG_XNU_NATIVE_PAN=y
-CONFIG_XNU_SHENG_PMGR=y
+CONFIG_XNU_SHENG_PMGR=n
+# PMGR shim 的存在意义是替 AMFI 提供 readAon/writeAon 的 ABI（并配有 AMFI→PMGR 契约审计）。
+# 本阶段 AMFI 已被 miniamfi 替掉（临时，见 docx/QEMU_LOOP §14），所以一并关掉；
+# 恢复 AMFI 时这里也要恢复成 y。
 # XNU's mockfs as a root on md0 (rd=md0): run-qemu.py --native-user boots UniXNU's static test process from it.
-# mockfs 的 vfc_mountroot 会抢在 hfs 之前把根挂成空测试文件系统（上游 --native-user 用）。
-# 我们这一栈的根在 UFS 卷上，必须让 mockfs 退回普通 fs。
-CONFIG_XNU_SOURCE_MOCKFS=n
+# mockfs：两个用途
+#  1) 上游 --native-user 的测试根；
+#  2) picasso 线复现 M6" 的**第一个根**（ramdisk 根等价物），再用
+#     picasso_switch_root=<分区> 触发第二次 vfs_mountroot() 切到我们的卷。
+# 不用它当根时（例如只用 ufs_root 直接挂我们的卷），把它设成 n 更省事。
+CONFIG_XNU_SOURCE_MOCKFS=y
 
 CONFIG_XNU_CRYPTO_BOOTSTRAP="prelinked"
 # No-op hooks for probes of the left-out components (scripts/build-link-stubs.py).

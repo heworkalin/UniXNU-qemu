@@ -38,7 +38,9 @@ archives = [
   "build-libpthread-kernel.py",
   "build-mockfs-fixture.py",
   "build-link-stubs.py",
-  "build-platform-power.py",
+  # ⚠️ 临时：build-platform-power.py（AMFI→PMGR 桥）在本阶段关掉——它的资格审计要求
+  # 内核候选里存在 AMFI，而我们已用 miniamfi 替掉（§14 恢复清单第 1 项）。
+  # "build-platform-power.py",
   # VirtIO MMIO block: publishes the QEMU disk images as IOMedia (this board links a real
   # IOStorageFamily, unlike the picasso build where that class is a zero stub).
   "build-arm-driver.py NativeVirtioBlock",
@@ -124,7 +126,10 @@ kernel_args = [
   "sheng-pmgr=2",
   # picasso 契约线：root 在我们的 bdevsw 设备上（bsd/dev/picasso_virtblk.c + picasso_ufs.c），
   # ufs_write=2 打开整盘写（分区名白名单在 bdevsw 层）→ HFS+ 日志/目录可写。
+  # 复现硬件 M6"：第一个根由 mockfs 提供，devfs 挂好后第二次 vfs_mountroot 切到 userdata。
+  # 若改成 ufs_root=userdata（去掉 picasso_switch_root），则是一次挂载直接做根。
   "ufs_root=userdata",
+  "picasso_switch_root=userdata",
   "ufs_write=2",
   # 自研 init 未签名：DEVELOPMENT 构建才解析这些（AMFI 放行）
   "amfi_allow_any_signature=1",

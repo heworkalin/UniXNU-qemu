@@ -50,8 +50,11 @@ tool = "kits/NativePrelink/emit_prelink.py"
 kernel = "build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf"
 kernelcache_sha256 = "f18b4df865405f2a287b84977d7aca745e056d656d9fc9df1662970ce2969de7"
 slide = "-0x1000000"
-early_security_init = "com.apple.driver.AppleMobileFileIntegrity=0xfffffff005ab4ae0"
+early_security_init = ""
 roots = [
+  # picasso 契约线：这几个 kext 依赖 AMFI，会把真 AMFI 一起拉进预链接，
+  # 与我们用的 miniamfi 撞（"interface already set"）。我们只跑自己的卷+init，
+  # 不需要图形/sandbox/HID，先摘掉。
   "com.apple.AppleFSCompression.AppleFSCompressionTypeZlib",
   "com.apple.driver.AppleARMPlatform",
   "com.apple.driver.AppleARMWatchdogTimer",
@@ -59,7 +62,6 @@ roots = [
   "com.apple.driver.AppleEffaceableStorage",
   "com.apple.driver.AppleIISController",
   "com.apple.driver.AppleM2ScalerCSCDriver",
-  "com.apple.driver.AppleMobileFileIntegrity",
   "com.apple.driver.ApplePMGR",
   "com.apple.driver.IODARTFamily",
   "com.apple.filesystems.apfs",
@@ -70,9 +72,7 @@ roots = [
   "com.apple.iokit.IOAudio2Family",
   "com.apple.iokit.IOCECFamily",
   "com.apple.iokit.IOCryptoAcceleratorFamily",
-  "com.apple.iokit.IOGPUFamily",
   "com.apple.iokit.IOHDCPFamily",
-  "com.apple.iokit.IOMobileGraphicsFamily",
   "com.apple.iokit.IOReportFamily",
   "com.apple.iokit.IOSlowAdaptiveClockingFamily",
   "com.apple.iokit.IOStorageFamily",
@@ -82,9 +82,6 @@ roots = [
   "com.apple.kext.AppleMatch",
   "com.apple.kext.CoreTrust",
   "com.apple.security.AppleImage4",
-  "com.apple.security.sandbox",
-  "com.apple.iokit.IOHIDFamily",
-  "com.apple.iokit.IOHIDEventDriver",
 ]
 
 # No [firmware]: QEMU runs its own EDK II AArch64 firmware, which has no DarwinBoot. The payload therefore loads
@@ -96,7 +93,7 @@ loader = "driver"
 title = "QEMU virt: source 4K XNU"
 dram_size = "0x180000000"            # the 6 GiB scripts/run-qemu.py gives the machine
 skip_setup_tool = "scripts/seed-data-skip-setup.py"
-panic_screen = true
+panic_screen = false   # 先关掉：panic 屏会接管 panic()，导致串口一行都没有
 trust_cache_sha256 = [
   "7416ca4f8377146626bb284e2133c76bee6cb4e3ee0af5d648b186235a7323a7",
   "8900d6a93d7a59ce1a872a5c081e559f4240a218f97e12d44d22dda46644d68f",
@@ -129,6 +126,9 @@ kernel_args = [
   # 自研 init 未签名：DEVELOPMENT 构建才解析这些（AMFI 放行）
   "amfi_allow_any_signature=1",
   "amfi_get_out_of_my_way=1",
+  # 注意：cs_enforcement_disable=1 会被 RELEASE 版 AMFI kext 直接 panic
+  # （"can't has cs_enforcement_disable" @AppleMobileFileIntegrity.cpp:5261），别加。
+  # 未签名 init 的出路是给它做 ad-hoc 签名，或换成 miniamfi（见 docx/QEMU_LOOP §13）。
   "-no_slto_panic",
   "ml-timeout-lock-panic-scale=40",
   "offline-mobile-graphics-load=1",

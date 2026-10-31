@@ -22,7 +22,7 @@ What QEMU does not cover: the stock bootloader, the board firmware, UFS, touch, 
 
 | 改动 | 位置 | 作用 | 性质 |
 | --- | --- | --- | --- |
-| **串口控制台**：ADT 增加 `uart0`（PL011）节点 + `run-qemu.py --serial-stdio` | `scripts/make-qemu-adt.py`、`scripts/run-qemu.py` | 内核 `kprintf` / `IOLog` 直接进终端，不必截图；排查驱动/挂载时是决定性的 | **通用（建议上游采纳）** |
+| **串口控制台**：ADT 增加 `uart0`（PL011）节点 + `run-qemu.py --serial-stdio` | `scripts/make-qemu-adt.py`、`scripts/run-qemu.py` | 内核 `kprintf` / `IOLog` 直接进终端，不必截图；排查驱动/挂载时是决定性的 | **通用** |
 | `--disk IMAGE`（可重复）：把宿主 qcow/raw 镜像按 `virtio-blk-device` 挂给 guest | `scripts/run-qemu.py` | 在 QEMU 里测存储线（不需要整块 iPadOS 用户态） | 本地测试 |
 | `--display gtk/sdl`（Linux 下的窗口；上游只有 macOS `cocoa`） | `scripts/run-qemu.py` | 在 Linux 上开窗口看画面 | 本地测试 |
 | 并行多实例：运行目录与 QMP socket 按 pid 唯一化 | `scripts/run-qemu.py` | 同一宿主同时跑多台「设备」，做 A/B 对照 | 本地测试 |

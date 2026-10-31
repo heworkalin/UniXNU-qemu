@@ -26,7 +26,10 @@ CONFIG_XNU_SOURCE_MOCKFS=y
 
 CONFIG_XNU_CRYPTO_BOOTSTRAP="prelinked"
 # No-op hooks for probes of the left-out components (scripts/build-link-stubs.py).
-CONFIG_XNU_EXTRA_LD_ARCHIVES="{tree}/build/link-stubs/libLinkStubs.a {tree}/build/virtio-mmio-block/libVirtioMmioBlock.a"
+CONFIG_XNU_EXTRA_LD_ARCHIVES="{tree}/build/link-stubs/libLinkStubs.a"
+# virtio-blk 必须走专用开关：EXTRA_LD_ARCHIVES 是不带 -force_load 的裸归档路径，
+# 无人引用其符号时会被链接器整个丢弃（内核里 0 个 virtio 符号，磁盘探测静默失效）。
+CONFIG_XNU_NATIVE_VIRTIO_BLOCK=y
 CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n
 CONFIG_XNU_ARMVIRT_PLATFORM=n
 

@@ -15,6 +15,43 @@ What QEMU replaces:
 
 What QEMU does not cover: the stock bootloader, the board firmware, UFS, touch, the panel and the GPU.
 
+## 本 fork 的改动（heworkalin）—— 以本地测试为主
+
+> 这一节的目的是把「我们加了什么、为什么加、哪些值得上游采纳」讲清楚。
+> 除标注 **通用** 的那一项外，其余都是**本地调试/测试便利性**，不建议当作上游行为。
+
+| 改动 | 位置 | 作用 | 性质 |
+| --- | --- | --- | --- |
+| **串口控制台**：ADT 增加 `uart0`（PL011）节点 + `run-qemu.py --serial-stdio` | `scripts/make-qemu-adt.py`、`scripts/run-qemu.py` | 内核 `kprintf` / `IOLog` 直接进终端，不必截图；排查驱动/挂载时是决定性的 | **通用（建议上游采纳）** |
+| `--disk IMAGE`（可重复）：把宿主 qcow/raw 镜像按 `virtio-blk-device` 挂给 guest | `scripts/run-qemu.py` | 在 QEMU 里测存储线（不需要整块 iPadOS 用户态） | 本地测试 |
+| `--display gtk/sdl`（Linux 下的窗口；上游只有 macOS `cocoa`） | `scripts/run-qemu.py` | 在 Linux 上开窗口看画面 | 本地测试 |
+| 并行多实例：运行目录与 QMP socket 按 pid 唯一化 | `scripts/run-qemu.py` | 同一宿主同时跑多台「设备」，做 A/B 对照 | 本地测试 |
+| DarwinBoot ADT 遍历诊断：`AdtNode()` 每个失败点编号 + 外层判定打标签（仅在拒绝时打印） | DarwinBoot 子模块（工具树补丁） | 定位 `boot refused: Compromised Data`（多节点 ADT 被拒） | 调试用 |
+
+### 为在 QEMU 里跑「我们自己的存储栈」而加的配置
+
+这些只在本 fork 的板配置里生效，用来把 UFS/HFS 那条线（真机上已验证）搬到 QEMU 上跑：
+
+- `board.toml`
+  - `[kernel.prelink] roots` 追加 `com.apple.filesystems.hfs.kext`（HFS+ 文件系统）与
+    `com.apple.iokit.IOMobileGraphicsFamily`（显示接口，供 ABI 抽取/接线验证）；
+  - `kernel_args` 追加 `ufs_root=<分区>`、`ufs_write=2`、`picasso_switch_root=<分区>`、
+    `amfi_allow_any_signature=1`、`amfi_get_out_of_my_way=1`、`panic_freeze=1`；
+  - `panic_screen = false`：panic 屏组件会接管 `panic()`，导致**串口一行都没有**；关掉后 panic 回到
+    `kprintf` 路径，串口与屏幕都能看到。
+- `configs/qemu_defconfig`
+  - `CONFIG_XNU_SOURCE_MOCKFS=y`：mockfs 无条件返回挂载成功，用作“第一个根”（复现真机的
+    “ramdisk 根 → 切根”路径）；
+  - `CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y`：链接自研的 Legacy 显示 ABI 档案（358 槽虚表 + 两个钩子）；
+  - `CONFIG_XNU_SHENG_PMGR=n`：该 PMGR 桥是为 AMFI 提供 `readAon/writeAon` 的，本 fork 用
+    `miniamfi` 替掉了真 AMFI，因此一并关闭；
+  - `CONFIG_XNU_NATIVE_VIRTIO_BLOCK=n`：上游的 `IOBlockStorageDevice` 路线需要 `IOStorageFamily`
+    的内核链接期符号（预链接 kext），本 fork 改走**自研 bdevsw**，故不使用。
+
+> 注意：`--disk` 走的是**我们的 bdevsw 块设备**（`bsd/dev/picasso_virtblk.c`），不是上游
+> `NativeVirtioBlock`/`IOMedia`；因此 guest 里不会出现 `diskXsY` 之类的 BSD 节点，而是 `/dev/ufs0`、
+> `/dev/ufs_<PART>`。相关结论见 picasso 工作区 `docx/QEMU_LOOP_20261031.md`。
+
 ## Files
 
 | File | Contents |

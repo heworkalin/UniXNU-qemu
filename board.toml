@@ -63,6 +63,8 @@ roots = [
   "com.apple.driver.ApplePMGR",
   "com.apple.driver.IODARTFamily",
   "com.apple.filesystems.apfs",
+  # picasso 契约线在 QEMU 里要把 HFS+ 卷当根/当 /private/var，必须把 hfs kext 预链接进来。
+  "com.apple.filesystems.hfs.kext",
   "com.apple.iokit.CoreAnalyticsFamily",
   "com.apple.iokit.IOAVFamily",
   "com.apple.iokit.IOAudio2Family",
@@ -120,6 +122,10 @@ kernel_args = [
   "kt_fixed_zones=120",
   "armcpu-diagnostics=1",
   "sheng-pmgr=2",
+  # picasso 契约线：root 在我们的 bdevsw 设备上（bsd/dev/picasso_virtblk.c + picasso_ufs.c），
+  # ufs_write=2 打开整盘写（分区名白名单在 bdevsw 层）→ HFS+ 日志/目录可写。
+  "ufs_root=userdata",
+  "ufs_write=2",
   "-no_slto_panic",
   "ml-timeout-lock-panic-scale=40",
   "offline-mobile-graphics-load=1",

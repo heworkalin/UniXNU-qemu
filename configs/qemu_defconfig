@@ -22,14 +22,18 @@ CONFIG_XNU_NATIVE_ARCH_TIMER=y
 CONFIG_XNU_NATIVE_PAN=y
 CONFIG_XNU_SHENG_PMGR=y
 # XNU's mockfs as a root on md0 (rd=md0): run-qemu.py --native-user boots UniXNU's static test process from it.
-CONFIG_XNU_SOURCE_MOCKFS=y
+# mockfs 的 vfc_mountroot 会抢在 hfs 之前把根挂成空测试文件系统（上游 --native-user 用）。
+# 我们这一栈的根在 UFS 卷上，必须让 mockfs 退回普通 fs。
+CONFIG_XNU_SOURCE_MOCKFS=n
 
 CONFIG_XNU_CRYPTO_BOOTSTRAP="prelinked"
 # No-op hooks for probes of the left-out components (scripts/build-link-stubs.py).
 CONFIG_XNU_EXTRA_LD_ARCHIVES="{tree}/build/link-stubs/libLinkStubs.a"
 # virtio-blk 必须走专用开关：EXTRA_LD_ARCHIVES 是不带 -force_load 的裸归档路径，
 # 无人引用其符号时会被链接器整个丢弃（内核里 0 个 virtio 符号，磁盘探测静默失效）。
-CONFIG_XNU_NATIVE_VIRTIO_BLOCK=y
+# 关掉上游的 IOBlockStorageDevice 路线：它要 IOStorageFamily 的内核链接期符号（预链接 kext），
+# 需要整套 storage-ABI 资格认证；我们改用自己的 bdevsw 栈（bsd/dev/picasso_ufs.c + picasso_virtblk.c）。
+CONFIG_XNU_NATIVE_VIRTIO_BLOCK=n
 CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n
 CONFIG_XNU_ARMVIRT_PLATFORM=n
 

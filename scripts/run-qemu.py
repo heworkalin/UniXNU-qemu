@@ -186,7 +186,8 @@ elif args.display == 'cocoa':
 else:
     display_arg = args.display
 
-command = [qemu, '-M', 'virt,virtualization=off,secure=off,gic-version=3', '-accel', args.accel,
+command = [qemu, '-global', 'virtio-mmio.force-legacy=off',
+           '-M', 'virt,virtualization=off,secure=off,gic-version=3', '-accel', args.accel,
            '-cpu', 'cortex-a710' if args.accel == 'tcg' else 'host',
            '-m', str(MEMORY_MIB), '-smp', '1',
            '-drive', f'if=pflash,format=raw,readonly=on,file={code}', '-drive', f'if=pflash,format=raw,file={variables}',

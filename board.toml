@@ -52,6 +52,9 @@ kernelcache_sha256 = "f18b4df865405f2a287b84977d7aca745e056d656d9fc9df1662970ce2
 slide = "-0x1000000"
 early_security_init = ""
 roots = [
+  # ⚠️ 临时（仅限"优化抽象驱动层"阶段）：本文件里所有与安全链相关的删减
+  #    （AMFI 不预链接、摘掉依赖它的 kext、panic_screen=false、跳过根卷认证）
+  #    都是脚手架，**交付前必须整份恢复**，清单见 docx/QEMU_LOOP_20261031.md §14。
   # picasso 契约线：这几个 kext 依赖 AMFI，会把真 AMFI 一起拉进预链接，
   # 与我们用的 miniamfi 撞（"interface already set"）。我们只跑自己的卷+init，
   # 不需要图形/sandbox/HID，先摘掉。
@@ -93,7 +96,7 @@ loader = "driver"
 title = "QEMU virt: source 4K XNU"
 dram_size = "0x180000000"            # the 6 GiB scripts/run-qemu.py gives the machine
 skip_setup_tool = "scripts/seed-data-skip-setup.py"
-panic_screen = false   # 先关掉：panic 屏会接管 panic()，导致串口一行都没有
+panic_screen = false   # ⚠️ 临时：panic 屏会接管 panic() 导致串口空白；恢复清单见 doc §14
 trust_cache_sha256 = [
   "7416ca4f8377146626bb284e2133c76bee6cb4e3ee0af5d648b186235a7323a7",
   "8900d6a93d7a59ce1a872a5c081e559f4240a218f97e12d44d22dda46644d68f",
